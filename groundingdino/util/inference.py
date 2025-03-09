@@ -97,33 +97,44 @@ def predict(
     return boxes, logits.max(dim=1)[0], phrases
 
 
-def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: List[str]) -> np.ndarray:
-    """    
+def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor, phrases: List[str], 
+             box_thickness: int = 10, text_scale: float = 2.0, text_thickness: int = 10) -> np.ndarray:
+    """
     This function annotates an image with bounding boxes and labels.
 
     Parameters:
     image_source (np.ndarray): The source image to be annotated.
-    boxes (torch.Tensor): A tensor containing bounding box coordinates.
+    boxes (torch.Tensor): A tensor containing bounding box coordinates in normalized cxcywh format.
     logits (torch.Tensor): A tensor containing confidence scores for each bounding box.
     phrases (List[str]): A list of labels for each bounding box.
+    box_thickness (int, optional): The thickness of the bounding box lines. Default is 10.
+    text_scale (float, optional): The scale of the text labels. Default is 2.0.
+    text_thickness (int, optional): The thickness of the text labels. Default is 10.
 
     Returns:
-    np.ndarray: The annotated image.
+    np.ndarray: The annotated image in BGR format.
     """
+    # Get image dimensions and scale the normalized bounding boxes
     h, w, _ = image_source.shape
     boxes = boxes * torch.Tensor([w, h, w, h])
     xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
     detections = sv.Detections(xyxy=xyxy)
 
+    # Create labels combining phrases and confidence scores
     labels = [
         f"{phrase} {logit:.2f}"
         for phrase, logit
         in zip(phrases, logits)
     ]
 
-    bbox_annotator = sv.BoxAnnotator(color_lookup=sv.ColorLookup.INDEX)
-    label_annotator = sv.LabelAnnotator(color_lookup=sv.ColorLookup.INDEX)
+    # Initialize annotators with configurable parameters
+    bbox_annotator = sv.BoxAnnotator(color_lookup=sv.ColorLookup.INDEX, thickness=box_thickness)
+    label_annotator = sv.LabelAnnotator(color_lookup=sv.ColorLookup.INDEX, text_scale=text_scale, text_thickness=text_thickness)
+    
+    # Convert image from RGB to BGR for OpenCV compatibility
     annotated_frame = cv2.cvtColor(image_source, cv2.COLOR_RGB2BGR)
+    
+    # Annotate the image with bounding boxes and labels
     annotated_frame = bbox_annotator.annotate(scene=annotated_frame, detections=detections)
     annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections, labels=labels)
     return annotated_frame
